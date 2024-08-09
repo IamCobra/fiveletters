@@ -1,10 +1,8 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Collections;
 
 namespace fiveletters
 {
@@ -14,6 +12,7 @@ namespace fiveletters
         {
             var filePath = "C:\\Users\\HFGF\\Downloads\\alpha.txt";
             List<int> wordMasks = new List<int>();
+            HashSet<string> uniqueWords = new HashSet<string>();
 
             // Filtrering og maskering
             using (StreamReader sr = new StreamReader(filePath))
@@ -23,7 +22,14 @@ namespace fiveletters
                 {
                     if (line.Length == 5 && line.Distinct().Count() == 5)
                     {
-                        wordMasks.Add(GetWordMask(line));
+                        // Normalize the word by sorting the characters
+                        string normalizedWord = new string(line.OrderBy(c => c).ToArray());
+
+                        // Add the normalized word to the set if it's not already present
+                        if (uniqueWords.Add(normalizedWord))
+                        {
+                            wordMasks.Add(GetWordMask(line));
+                        }
                     }
                 }
             }
@@ -43,55 +49,43 @@ namespace fiveletters
 
         static int FindValidCombinations(List<int> wordMasks, out int totalCombinations)
         {
-            int count = 0;
             int n = wordMasks.Count;
             totalCombinations = 0;
+            var localCounts = new System.Collections.Concurrent.ConcurrentBag<int>();
+            var localTotalCombinations = new System.Collections.Concurrent.ConcurrentBag<int>();
 
-            // Brug af ConcurrentBag til at samle resultater
-            var localCounts = new ConcurrentBag<int>();
-            var localTotalCombinations = new ConcurrentBag<int>();
-
-            Parallel.For(0, n, () => (localCount: 0, localTotalCombinations: 0), (i, loopState, local) =>
+            System.Threading.Tasks.Parallel.For(0, n, i =>
             {
-                for (int j = i + 1; j < n; j++)
-                {
-                    if ((wordMasks[i] & wordMasks[j]) != 0) continue;
-                    int ijMask = wordMasks[i] | wordMasks[j];
-                    for (int k = j + 1; k < n; k++)
-                    {
-                        if ((ijMask & wordMasks[k]) != 0) continue;
-                        int ijkMask = ijMask | wordMasks[k];
-                        for (int l = k + 1; l < n; l++)
-                        {
-                            if ((ijkMask & wordMasks[l]) != 0) continue;
-                            int ijklMask = ijkMask | wordMasks[l];
-                            for (int m = l + 1; m < n; m++)
-                            {
-                                if ((ijklMask & wordMasks[m]) != 0) continue;
-
-                                local.localTotalCombinations++;
-
-                                int combinedMask = ijklMask | wordMasks[m];
-                                if (combinedMask == (1 << 25) - 1)
-                                {
-                                    local.localCount++;
-                                }
-                            }
-                        }
-                    }
-                }
-                return local;
-            },
-            local =>
-            {
-                localCounts.Add(local.localCount);
-                localTotalCombinations.Add(local.localTotalCombinations);
+                RecursiveSearch(wordMasks, i, 1, wordMasks[i], localCounts, localTotalCombinations);
             });
 
-            count = localCounts.Sum();
+            int count = localCounts.Sum();
             totalCombinations = localTotalCombinations.Sum();
 
             return count;
+        }
+
+        static void RecursiveSearch(List<int> wordMasks, int index, int depth, int currentMask, System.Collections.Concurrent.ConcurrentBag<int> localCounts, System.Collections.Concurrent.ConcurrentBag<int> localTotalCombinations)
+        {
+            int n = wordMasks.Count;
+
+            if (depth == 5) // We have reached the desired depth (5 words)
+            {
+                if (currentMask == (1 << 25) - 1)
+                {
+                    localCounts.Add(1);
+                }
+                localTotalCombinations.Add(1);
+                return;
+            }
+
+            for (int i = index + 1; i < n; i++)
+            {
+                if ((currentMask & wordMasks[i]) == 0)
+                {
+                    RecursiveSearch(wordMasks, i, depth + 1, currentMask | wordMasks[i], localCounts, localTotalCombinations);
+                }
+            }
         }
 
         static int GetWordMask(string word)
