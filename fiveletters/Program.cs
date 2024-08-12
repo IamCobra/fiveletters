@@ -2,7 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections;
+using System.Threading;
+using System.Diagnostics; 
 
 namespace fiveletters
 {
@@ -10,9 +11,9 @@ namespace fiveletters
     {
         static void Main(string[] args)
         {
-            var filePath = "C:\\Users\\HFGF\\Downloads\\alpha.txt";
+            var filePath = "C:\\Users\\HFGF\\Desktop\\Programmering hf2\\fiveletters\\fiveletters\\alpha.txt";
             List<int> wordMasks = new List<int>();
-            HashSet<string> uniqueWords = new HashSet<string>();
+            HashSet<string> uniqueWords = new HashSet<string>(); // hashset tillader ikke duplikerede elementer. bruges til at sikre kun unikke ord bliver tilføjet
 
             // Filtrering og maskering
             using (StreamReader sr = new StreamReader(filePath))
@@ -22,11 +23,11 @@ namespace fiveletters
                 {
                     if (line.Length == 5 && line.Distinct().Count() == 5)
                     {
-                        // Normalize the word by sorting the characters
+                        //  Normalisere bogstavet ved at sortere karakterne alfabetisk
                         string normalizedWord = new string(line.OrderBy(c => c).ToArray());
 
-                        // Add the normalized word to the set if it's not already present
-                        if (uniqueWords.Add(normalizedWord))
+                        //  tilføjer det normaliserede ord til selve settet hvis den ikke allerede er der
+                        if (uniqueWords.Add(normalizedWord)) // fjerner anagrammer
                         {
                             wordMasks.Add(GetWordMask(line));
                         }
@@ -34,56 +35,48 @@ namespace fiveletters
                 }
             }
 
-            DateTime startTime = DateTime.Now;
 
-            int result = FindValidCombinations(wordMasks, out int totalCombinations);
+            Stopwatch stopwatch = Stopwatch.StartNew();
 
-            Console.WriteLine($"Total combinations: {totalCombinations}");
+            int totalCombinations = FindValidCombinations(wordMasks);
 
-            DateTime endTime = DateTime.Now;
+            stopwatch.Stop();
 
-            TimeSpan diff = (endTime - startTime).Duration();
-
-            Console.WriteLine($"Tid taget: {diff.TotalSeconds} sekunder ({diff.TotalMinutes} minutter)");
+            Console.WriteLine($"Total combinations processed: {totalCombinations}");
+            Console.WriteLine($"Tid taget: {stopwatch.Elapsed.TotalSeconds} sekunder");
         }
 
-        static int FindValidCombinations(List<int> wordMasks, out int totalCombinations)
+        static int FindValidCombinations(List<int> wordMasks)
         {
-            int n = wordMasks.Count;
-            totalCombinations = 0;
-            var localCounts = new System.Collections.Concurrent.ConcurrentBag<int>();
-            var localTotalCombinations = new System.Collections.Concurrent.ConcurrentBag<int>();
+            int n = wordMasks.Count();
+            int totalCombinations = 0;
 
-            System.Threading.Tasks.Parallel.For(0, n, i =>
+            Parallel.For(0, n, i =>
             {
-                RecursiveSearch(wordMasks, i, 1, wordMasks[i], localCounts, localTotalCombinations);
+                RecursiveSearch(wordMasks, i, 1, wordMasks[i], ref totalCombinations);
             });
 
-            int count = localCounts.Sum();
-            totalCombinations = localTotalCombinations.Sum();
-
-            return count;
+            return totalCombinations;
         }
 
-        static void RecursiveSearch(List<int> wordMasks, int index, int depth, int currentMask, System.Collections.Concurrent.ConcurrentBag<int> localCounts, System.Collections.Concurrent.ConcurrentBag<int> localTotalCombinations)
-        {
-            int n = wordMasks.Count;
+        // depth er hvor mange rekursiv kald der egentlig er lavet og hvor dybt den søger. 
+        // currentMask En bitmaske, der repræsenterer den kombination af bogstaver, der er blevet samlet fra de valgte ord indtil videre
 
-            if (depth == 5) // We have reached the desired depth (5 words)
+        static void RecursiveSearch(List<int> wordMasks, int index, int depth, int currentMask, ref int totalCombinations)
+        {
+            int n = wordMasks.Count(); // gemmer antal bit den finder i n
+
+            if (depth == 5)
             {
-                if (currentMask == (1 << 25) - 1)
-                {
-                    localCounts.Add(1);
-                }
-                localTotalCombinations.Add(1);
+                Interlocked.Increment(ref totalCombinations); // brug concurrentbag istedet?
                 return;
             }
 
             for (int i = index + 1; i < n; i++)
             {
-                if ((currentMask & wordMasks[i]) == 0)
+                if ((currentMask & wordMasks[i]) == 0) // tjekker efter om værdien er 0 og fortsætter kun når den har fundet et nyt unikt ord 
                 {
-                    RecursiveSearch(wordMasks, i, depth + 1, currentMask | wordMasks[i], localCounts, localTotalCombinations);
+                    RecursiveSearch(wordMasks, i, depth + 1, currentMask | wordMasks[i], ref totalCombinations);
                 }
             }
         }
