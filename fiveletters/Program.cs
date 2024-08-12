@@ -35,6 +35,8 @@ namespace fiveletters
                 }
             }
 
+            Console.WriteLine("Amount of words: " + wordMasks.Count);
+
 
             Stopwatch stopwatch = Stopwatch.StartNew();
 
